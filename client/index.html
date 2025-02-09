@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindLink AI</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <h1>MindLink AI</h1>
+        <div id="chat-box"></div>
+        <div class="input-container">
+            <textarea id="userInput" placeholder="Введите сообщение..." onkeypress="handleKeyPress(event)"></textarea>
+            <button onclick="askAI()">➤</button>
+        </div>
+        <p class="emotion-label">🧠 <strong>Определённая эмоция:</strong> <span id="emotion">Не определено</span></p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
