@@ -1,16 +1,36 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const fs = require("fs");
 const { spawn } = require("child_process");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Разрешаем CORS только для нужного домена
+const allowedOrigins = ["https://ai-psychologist-production-c69a.up.railway.app"];
+
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error("CORS policy error"));
+        }
+    },
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"],
+    credentials: true
+}));
+
+// Обрабатываем preflight-запросы
+app.options("/ask", cors());
+
 app.use(express.json());
 
 const conversationHistory = {};
 
+// Раздача статических файлов
 app.use(express.static(path.join(__dirname, "../client")));
 
 app.get("/", (req, res) => {
@@ -40,8 +60,15 @@ app.post("/ask", (req, res) => {
     }
 
     console.log("📩 Отправляем в Python:", JSON.stringify({ messages: conversationHistory[userIp] }, null, 2)); 
-    
-    const pythonProcess = spawn("python", ["server/gpt.py"], { stdio: ["pipe", "pipe", "ignore"] });
+
+    const pythonScriptPath = path.join(__dirname, "gpt.py");
+
+    if (!fs.existsSync(pythonScriptPath)) {
+        console.error("Ошибка: файл gpt.py не найден.");
+        return res.status(500).json({ error: "Ошибка сервера: gpt.py отсутствует" });
+    }
+
+    const pythonProcess = spawn("python", [pythonScriptPath]);
 
     let responseData = "";
 
@@ -49,10 +76,13 @@ app.post("/ask", (req, res) => {
         responseData += data.toString();
     });
 
+    pythonProcess.stderr.on("data", (data) => {
+        console.error("Ошибка в Python-скрипте:", data.toString());
+    });
+
     pythonProcess.on("close", () => {
         try {
             responseData = responseData.trim();
-
             responseData = responseData.replace(/New g4f version: .*?\| pip install -U g4f\n?/g, "").trim();
 
             console.log("Очищенный ответ от Python:", responseData);
@@ -60,7 +90,7 @@ app.post("/ask", (req, res) => {
             const responseJson = JSON.parse(responseData);
 
             conversationHistory[userIp][conversationHistory[userIp].length - 1].emotion = responseJson.emotion;
-            
+
             res.json(responseJson);
         } catch (error) {
             console.error("Ошибка при обработке JSON:", error);
@@ -71,9 +101,6 @@ app.post("/ask", (req, res) => {
     pythonProcess.stdin.write(JSON.stringify({ messages: conversationHistory[userIp] }) + "\n");
     pythonProcess.stdin.end();
 });
-
-
-
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Сервер запущен на порту ${PORT}`);
