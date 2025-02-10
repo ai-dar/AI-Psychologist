@@ -75,6 +75,8 @@ app.post("/ask", (req, res) => {
 
 
 
-app.listen(PORT, () => {
-    app.listen(PORT, "0.0.0.0", () => console.log(`Сервер запущен на порту ${PORT}`));
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Сервер запущен на порту ${PORT}`);
+}).on("error", (err) => {
+    console.error("Ошибка запуска сервера:", err.message);
 });
