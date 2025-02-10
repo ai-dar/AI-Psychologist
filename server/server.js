@@ -7,41 +7,31 @@ const { spawn } = require("child_process");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ✅ CORS с разрешением всех методов
-const allowedOrigins = [
-    "https://ai-psychologist-production-c69a.up.railway.app"
-];
+// ✅ Настройки CORS (без дубликатов!)
+const allowedOrigins = ["https://ai-psychologist-production-c69a.up.railway.app"];
 
 app.use(cors({
-    origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error("CORS policy error"));
-        }
-    },
+    origin: allowedOrigins,
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type"],
     credentials: true
 }));
 
-// ✅ Preflight-запросы (важно для CORS)
+// ✅ Обрабатываем preflight-запросы (важно!)
 app.options("*", cors());
 
 app.use(express.json());
 
-const conversationHistory = {};
-
-// ✅ Проверка, какой `python` используется на сервере (для диагностики)
-spawn("which", ["python"]).stdout.on("data", (data) => {
-    console.log("Используется Python:", data.toString().trim());
-});
-
-// ✅ Раздача статики (важно, чтобы CORS работал)
+// ✅ Раздача статических файлов
 app.use(express.static(path.join(__dirname, "../client")));
 
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "../client/index.html"));
+});
+
+// ✅ Проверка, какой `python` используется (для диагностики)
+spawn("which", ["python"]).stdout.on("data", (data) => {
+    console.log("Используется Python:", data.toString().trim());
 });
 
 // ✅ Обработчик POST-запроса /ask
