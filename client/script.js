@@ -1,3 +1,22 @@
+const cors = require("cors");
+const allowedOrigins = [
+    "https://ai-psychologist-production-c69a.up.railway.app", // Фронтенд Railway
+    "https://ai-psychologist-production-0fb2.up.railway.app"  // Бэкенд Railway
+];
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error("CORS policy error"));
+        }
+    },
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"]
+}));
+
+// Обрабатываем preflight-запросы
+app.options("/ask", cors());
 async function askAI() {
     const userInput = document.getElementById("userInput").value.trim();
     const chatBox = document.getElementById("chat-box");
