@@ -7,8 +7,10 @@ const { spawn } = require("child_process");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Разрешаем CORS только для нужного домена
-const allowedOrigins = ["https://ai-psychologist-production-c69a.up.railway.app"];
+// ✅ CORS с разрешением всех методов
+const allowedOrigins = [
+    "https://ai-psychologist-production-c69a.up.railway.app"
+];
 
 app.use(cors({
     origin: (origin, callback) => {
@@ -23,87 +25,102 @@ app.use(cors({
     credentials: true
 }));
 
-// Обрабатываем preflight-запросы
-app.options("/ask", cors());
+// ✅ Preflight-запросы (важно для CORS)
+app.options("*", cors());
 
 app.use(express.json());
 
 const conversationHistory = {};
 
-// Раздача статических файлов
+// ✅ Проверка, какой `python` используется на сервере (для диагностики)
+spawn("which", ["python"]).stdout.on("data", (data) => {
+    console.log("Используется Python:", data.toString().trim());
+});
+
+// ✅ Раздача статики (важно, чтобы CORS работал)
 app.use(express.static(path.join(__dirname, "../client")));
 
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "../client/index.html"));
 });
 
+// ✅ Обработчик POST-запроса /ask
 app.post("/ask", (req, res) => {
     const userMessage = req.body.message;
     const userIp = req.ip;
 
     if (!userMessage) {
+        console.log("⚠️ Пустое сообщение!");
         return res.status(400).json({ error: "Введите сообщение!" });
     }
 
-    console.log("Запрос от клиента:", userMessage);
+    console.log("📩 Запрос от клиента:", userMessage);
 
     if (!conversationHistory[userIp]) {
         conversationHistory[userIp] = [];
     }
 
     conversationHistory[userIp] = conversationHistory[userIp].filter(msg => typeof msg === "object");
-
     conversationHistory[userIp].push({ text: userMessage, emotion: "неизвестно" });
 
     if (conversationHistory[userIp].length > 5) {
         conversationHistory[userIp].shift();
     }
 
-    console.log("📩 Отправляем в Python:", JSON.stringify({ messages: conversationHistory[userIp] }, null, 2)); 
+    console.log("📨 Отправляем в Python:", JSON.stringify({ messages: conversationHistory[userIp] }, null, 2));
 
     const pythonScriptPath = path.join(__dirname, "gpt.py");
 
     if (!fs.existsSync(pythonScriptPath)) {
-        console.error("Ошибка: файл gpt.py не найден.");
+        console.error("❌ Ошибка: gpt.py не найден.");
         return res.status(500).json({ error: "Ошибка сервера: gpt.py отсутствует" });
     }
 
-    const pythonProcess = spawn("python", [pythonScriptPath]);
+    try {
+        const pythonProcess = spawn("python", [pythonScriptPath]);
 
-    let responseData = "";
+        let responseData = "";
 
-    pythonProcess.stdout.on("data", (data) => {
-        responseData += data.toString();
-    });
+        pythonProcess.stdout.on("data", (data) => {
+            responseData += data.toString();
+        });
 
-    pythonProcess.stderr.on("data", (data) => {
-        console.error("Ошибка в Python-скрипте:", data.toString());
-    });
+        pythonProcess.stderr.on("data", (data) => {
+            console.error("⚠️ Ошибка в Python-скрипте:", data.toString());
+        });
 
-    pythonProcess.on("close", () => {
-        try {
-            responseData = responseData.trim();
-            responseData = responseData.replace(/New g4f version: .*?\| pip install -U g4f\n?/g, "").trim();
+        pythonProcess.on("close", () => {
+            try {
+                responseData = responseData.trim();
+                responseData = responseData.replace(/New g4f version: .*?\| pip install -U g4f\n?/g, "").trim();
 
-            console.log("Очищенный ответ от Python:", responseData);
+                console.log("✅ Очищенный ответ от Python:", responseData);
 
-            const responseJson = JSON.parse(responseData);
+                if (!responseData) {
+                    throw new Error("Python вернул пустой ответ");
+                }
 
-            conversationHistory[userIp][conversationHistory[userIp].length - 1].emotion = responseJson.emotion;
+                const responseJson = JSON.parse(responseData);
 
-            res.json(responseJson);
-        } catch (error) {
-            console.error("Ошибка при обработке JSON:", error);
-            res.status(500).json({ error: "Ошибка обработки ответа от GPT" });
-        }
-    });
+                conversationHistory[userIp][conversationHistory[userIp].length - 1].emotion = responseJson.emotion;
+                res.json(responseJson);
+            } catch (error) {
+                console.error("❌ Ошибка при обработке JSON:", error);
+                res.status(500).json({ error: "Ошибка обработки ответа от GPT" });
+            }
+        });
 
-    pythonProcess.stdin.write(JSON.stringify({ messages: conversationHistory[userIp] }) + "\n");
-    pythonProcess.stdin.end();
+        pythonProcess.stdin.write(JSON.stringify({ messages: conversationHistory[userIp] }) + "\n");
+        pythonProcess.stdin.end();
+    } catch (error) {
+        console.error("❌ Ошибка запуска Python-процесса:", error);
+        res.status(500).json({ error: "Ошибка сервера при запуске Python" });
+    }
 });
 
+// ✅ Запуск сервера
 app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
+    console.log(`🚀 Сервер запущен на порту ${PORT}`);
 }).on("error", (err) => {
-    console.error("Ошибка запуска сервера:", err.message);
+    console.error("❌ Ошибка запуска сервера:", err.message);
 });
